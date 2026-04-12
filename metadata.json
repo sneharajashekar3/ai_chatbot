@@ -1,0 +1,7 @@
+{
+  "name": "Remix: ai_GPT",
+  "description": "",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
