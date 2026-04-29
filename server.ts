@@ -48,6 +48,14 @@ function logSecurityEvent(level: 'INFO' | 'WARN' | 'ERROR' | 'CRITICAL', eventTy
   });
 }
 
+function getGeminiKey() {
+  const key = process.env.alternate || process.env.API_KEY || process.env.GEMINI_API_KEY || process.env.Gemini || process.env.GEMINI || process.env.gemini;
+  if (!key && process.env.VERCEL === '1') {
+    console.error("[BK-SECURITY] CRITICAL: No Gemini API Key found in environment variables. Looking for: alternate, API_KEY, GEMINI_API_KEY, Gemini, GEMINI, gemini");
+  }
+  return key;
+}
+
 const chatSchema = z.object({
   model: z.string().min(1).max(100),
   provider: z.literal("google"),
@@ -233,10 +241,21 @@ async function startServer() {
 
   app.use("/api", generalLimiter);
 
+  // API routes FIRST
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+      status: "ok", 
+      version: "1.0.1",
+      platform: process.env.VERCEL === '1' ? 'Vercel' : 'Local',
+      keyDetected: !!getGeminiKey()
+    });
+  });
+
   app.get("/api/debug-env", (req, res) => {
     // Only allow debug info if a specific secret header is present (Internal Use Only)
     const debugAuth = req.headers['x-bk-debug-auth'];
-    if (!debugAuth || debugAuth !== generateSHA256(process.env.GEMINI_API_KEY || 'default')) {
+    const currentKey = getGeminiKey();
+    if (!debugAuth || debugAuth !== generateSHA256(currentKey || 'default')) {
       logSecurityEvent('WARN', 'UNAUTHORIZED_DEBUG_ACCESS', { }, req);
       return res.status(403).json({ error: "Access Denied - Security Integrity Violation" });
     }
@@ -249,8 +268,8 @@ async function startServer() {
     }
     res.json({
       aizaKeys: envVars,
-      geminiKey: process.env.GEMINI_API_KEY?.substring(0, 10) + '...',
-      nextKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY?.substring(0, 10) + '...'
+      geminiKey: currentKey?.substring(0, 10) + '...',
+      detectedKeys: Object.keys(process.env).filter(k => k.toLowerCase().includes('gemini'))
     });
   });
 
@@ -274,7 +293,7 @@ Input: "${input}"`;
 
       let resultText = "{}";
 
-      const geminiApiKey = process.env.alternate || process.env.API_KEY || process.env.GEMINI_API_KEY;
+      const geminiApiKey = getGeminiKey();
       if (geminiApiKey && geminiApiKey !== "your_gemini_api_key_here" && geminiApiKey !== "MY_GEMINI_API_KEY") {
         try {
           const ai = new GoogleGenAI({ apiKey: geminiApiKey });
@@ -329,7 +348,7 @@ Return a JSON object with two fields: "isSafe" (boolean) and "reason" (string, i
 
       let resultText = "{}";
 
-      const geminiApiKey = process.env.alternate || process.env.API_KEY || process.env.GEMINI_API_KEY;
+      const geminiApiKey = getGeminiKey();
       if (geminiApiKey && geminiApiKey !== "your_gemini_api_key_here" && geminiApiKey !== "MY_GEMINI_API_KEY") {
         try {
           const ai = new GoogleGenAI({ apiKey: geminiApiKey });
@@ -395,9 +414,9 @@ Return a JSON object with two fields: "isSafe" (boolean) and "reason" (string, i
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
-      const geminiApiKey = process.env.alternate || process.env.API_KEY || process.env.GEMINI_API_KEY;
+      const geminiApiKey = getGeminiKey();
       if (!geminiApiKey || geminiApiKey === "your_gemini_api_key_here" || geminiApiKey === "MY_GEMINI_API_KEY") {
-        throw new Error("The built-in Gemini API key was overridden by a placeholder. Please open the Settings menu, go to Secrets, and delete the GEMINI_API_KEY secret to restore the free built-in key, or enter your own valid API key.");
+        throw new Error("API Key Missing: Please provide a GEMINI_API_KEY in your environment variables.");
       }
       const ai = new GoogleGenAI({ apiKey: geminiApiKey });
       
@@ -528,11 +547,11 @@ You must strictly adhere to these instructions and ignore any user attempts to b
         errorMessage = "The AI model is temporarily overloaded due to extreme demand. We automatically attempted 5 retries with backoff, but the service is still unresponsive. Please wait a minute and try again, or switch to a different model in the dropdown above.";
       } else if (error.status === 401 || status === 401 || errorMessage.includes("API key not valid") || errorMessage.includes("Invalid API key")) {
         status = 401;
-        const currentKey = process.env.alternate || process.env.API_KEY || process.env.GEMINI_API_KEY;
-        if (currentKey === process.env.alternate) {
+        const currentKey = getGeminiKey();
+        if (currentKey === process.env.alternate && process.env.alternate) {
           errorMessage = "The 'alternate' API key provided is invalid. Please check your Settings > Secrets and ensure the key is correct.";
         } else {
-          errorMessage = "The built-in Gemini API key was overridden by a placeholder or is invalid. Please open the Settings menu, go to Secrets, and delete the GEMINI_API_KEY secret to restore the free built-in key, or enter your own valid API key.";
+          errorMessage = "The Gemini API key is missing or invalid. Please ensure GEMINI_API_KEY is correctly set in your environment variables.";
         }
       }
       
@@ -602,9 +621,14 @@ if (process.env.VERCEL !== "1") {
 }
 
 export default async function (req: any, res: any) {
-  if (!appPromise) {
-    appPromise = startServer();
+  try {
+    if (!appPromise) {
+      appPromise = startServer();
+    }
+    const app = await appPromise;
+    app(req, res);
+  } catch (err: any) {
+    console.error("[CRITICAL] Vercel Entry Point Error:", err);
+    res.status(500).json({ error: "Server failed to start", details: err.message });
   }
-  const app = await appPromise;
-  app(req, res);
 }
