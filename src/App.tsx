@@ -11,8 +11,11 @@ import { Button } from '@/components/ui/button';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AnimatePresence, motion } from 'motion/react';
 
+import { Onboarding } from '@/components/Onboarding';
+
 function MainApp() {
   const [showIntro, setShowIntro] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   
   const [chats, setChats] = useState<Chat[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
@@ -25,11 +28,21 @@ function MainApp() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   useEffect(() => {
+    const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding_BK2026');
+    if (!hasSeenOnboarding) {
+      setShowOnboarding(true);
+    }
+
     const timer = setTimeout(() => {
       setShowIntro(false);
     }, 700);
     return () => clearTimeout(timer);
   }, []);
+
+  const completeOnboarding = () => {
+    localStorage.setItem('hasSeenOnboarding_BK2026', 'true');
+    setShowOnboarding(false);
+  };
 
   const isCreatingChat = useRef(false);
 
@@ -369,6 +382,7 @@ function MainApp() {
         )}
       </main>
       <Toaster />
+      {showOnboarding && <Onboarding onComplete={completeOnboarding} />}
       <SettingsDialog 
         open={isSettingsOpen} 
         onOpenChange={setIsSettingsOpen} 

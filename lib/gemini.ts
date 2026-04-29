@@ -18,7 +18,10 @@ export async function* streamChat(
   guardrailsEnabled: boolean = false
 ): AsyncGenerator<ChatResponseChunk, void, unknown> {
   const model = MODELS.find(m => m.id === modelId);
-  const systemInstruction = 'You are a helpful, secure, and professional AI assistant. Note: BK does not stand for Burger King and has no specific meaning in this context.';
+  const currentDateTime = new Date().toLocaleString();
+  const systemInstruction = `You are a helpful, secure, and professional AI assistant. 
+Current Date and Time: ${currentDateTime}. 
+Note: BK does not stand for Burger King and has no specific meaning in this context.`;
 
   if (!model) throw new Error('Model not found');
 

@@ -53,6 +53,13 @@ export function Sidebar({
   const [editTitle, setEditTitle] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
 
+  const [_, setTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleOpenSettings = () => {
     setIsOpen(false);
     onOpenSettings();
