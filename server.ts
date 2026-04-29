@@ -36,14 +36,14 @@ function logSecurityEvent(level: 'INFO' | 'WARN' | 'ERROR' | 'CRITICAL', eventTy
   
   const logEntry = `[${timestamp}] [${level}] [${eventType}] IP: ${ip} | User: ${userId} | Details: ${JSON.stringify(sanitizedDetails)}\n`;
   
+  if (process.env.VERCEL === '1') {
+    console.log(`[BK-SECURITY] ${logEntry.trim()}`);
+    return;
+  }
+  
   fs.appendFile(logFile, logEntry, (err) => {
     if (err) {
-      if (err.code === 'EROFS' || process.env.VERCEL === '1') {
-        // Just log to console on read-only filesystems (Vercel)
-        console.log(`[BK-SECURITY] ${logEntry.trim()}`);
-      } else {
-        console.error('Failed to write to security log:', err);
-      }
+      console.error('Failed to write to security log:', err);
     }
   });
 }

@@ -84,8 +84,18 @@ Note: BK does not stand for Burger King and has no specific meaning in this cont
   });
   
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || 'API error');
+    let errorMsg = `API Error (${response.status})`;
+    try {
+      const errorData = await response.json();
+      errorMsg = errorData.error || errorMsg;
+    } catch (e) {
+      // Fallback if not JSON
+      try {
+        const text = await response.text();
+        if (text && text.length < 200) errorMsg = `${errorMsg}: ${text}`;
+      } catch (e2) {}
+    }
+    throw new Error(errorMsg);
   }
   if (!response.body) throw new Error('No response body');
   
