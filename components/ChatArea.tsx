@@ -3,7 +3,9 @@ import { Message, Chat } from '@/lib/firestore';
 import { MessageBubble } from './MessageBubble';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { SendHorizontal, Loader2, Menu, PanelLeftOpen, Paperclip, X, Mic, Download, RefreshCw, AudioLines, Lightbulb, Copy } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { SendHorizontal, Loader2, Menu, PanelLeftOpen, Paperclip, X, Mic, Download, RefreshCw, AudioLines, Lightbulb, Copy, Sparkles, Square, Brain, Zap } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { ModelSelector } from './ModelSelector';
 import { Sidebar } from './Sidebar';
 import { LiveVoiceDialog } from './LiveVoiceDialog';
@@ -357,9 +359,53 @@ export function ChatArea({
           size="icon"
           onClick={handleSend}
           disabled={(!input.trim() && !attachment) || isGenerating}
-          className="shrink-0 rounded-full mb-1 h-8 w-8 sm:h-10 sm:w-10"
+          className={cn(
+            "relative shrink-0 rounded-full mb-1 h-8 w-8 sm:h-10 sm:w-10 transition-all duration-500 overflow-hidden",
+            isGenerating 
+              ? "bg-primary/20 border-primary/50 shadow-[0_0_15px_rgba(var(--primary),0.3)]" 
+              : "bg-primary hover:bg-primary/90"
+          )}
         >
-          <SendHorizontal className="w-4 h-4 sm:w-5 sm:h-5" />
+          <AnimatePresence mode="wait">
+            {isGenerating ? (
+              <motion.div
+                key="loading"
+                initial={{ opacity: 0, scale: 0.5, rotate: -180 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                exit={{ opacity: 0, scale: 0.5, rotate: 180 }}
+                transition={{ duration: 0.3 }}
+                className="relative"
+              >
+                <div className="absolute inset-0 animate-ping rounded-full bg-primary/40 blur-sm" />
+                <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-primary animate-pulse" />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="send"
+                initial={{ opacity: 0, scale: 0.5, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.5, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <SendHorizontal className="w-4 h-4 sm:w-5 sm:h-5 text-primary-foreground" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          
+          {isGenerating && (
+            <motion.div
+              layoutId="glow"
+              className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-transparent to-primary/10"
+              animate={{ 
+                rotate: [0, 360],
+              }}
+              transition={{ 
+                duration: 4, 
+                repeat: Infinity, 
+                ease: "linear" 
+              }}
+            />
+          )}
         </Button>
       </div>
       </div>
@@ -461,10 +507,34 @@ export function ChatArea({
             </div>
           )}
           {isGenerating && (messages.length === 0 || messages[messages.length - 1].role === 'user') && (
-            <div className="flex items-center gap-2 text-muted-foreground py-4">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm">AI is thinking...</span>
-            </div>
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-3 text-primary/70 py-6"
+            >
+              <div className="flex gap-1.5 items-center">
+                {[0, 1, 2].map((i) => (
+                  <motion.div
+                    key={i}
+                    className="w-2 h-2 rounded-full bg-primary/60"
+                    animate={{ 
+                      scale: [1, 1.4, 1],
+                      opacity: [0.2, 1, 0.2],
+                    }}
+                    transition={{
+                      duration: 1.2,
+                      repeat: Infinity,
+                      delay: i * 0.2,
+                      ease: "easeInOut"
+                    }}
+                  />
+                ))}
+              </div>
+              <span className="text-sm font-medium tracking-wide flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 animate-spin-slow" />
+                BK AI is crafting your answer...
+              </span>
+            </motion.div>
           )}
         </div>
       </div>

@@ -138,8 +138,13 @@ export function MessageBubble({ message, isLast, isGenerating, onModify, onEditM
               >
                 {message.text}
               </ReactMarkdown>
-              {isGenerating && isLast && (
-                <span className="inline-block w-2 h-4 ml-1 bg-primary animate-pulse align-middle" />
+              {!isUser && isLast && isGenerating && (
+                <motion.span
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0, 1, 0] }}
+                  transition={{ duration: 0.8, repeat: Infinity }}
+                  className="inline-block w-1.5 h-4 bg-primary/80 ml-0.5 align-middle rounded-full"
+                />
               )}
             </div>
           )}

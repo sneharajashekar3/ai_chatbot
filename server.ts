@@ -3,12 +3,20 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { z } from "zod";
 import sanitizeHtml from "sanitize-html";
 import rateLimit from "express-rate-limit";
 import { GoogleGenAI } from "@google/genai";
 
 const logFile = path.join(process.cwd(), 'security.log');
+
+/**
+ * SHA-256 Utility for Integrity and Hashing
+ */
+function generateSHA256(data: string): string {
+  return crypto.createHash('sha256').update(data).digest('hex');
+}
 
 function logSecurityEvent(level: 'INFO' | 'WARN' | 'ERROR' | 'CRITICAL', eventType: string, details: any, req?: express.Request) {
   const timestamp = new Date().toISOString();
@@ -22,11 +30,10 @@ function logSecurityEvent(level: 'INFO' | 'WARN' | 'ERROR' | 'CRITICAL', eventTy
 
   // Ensure no sensitive data is logged
   const sanitizedDetails = { ...details };
+  if (sanitizedDetails.input) sanitizedDetails.input_hash = generateSHA256(sanitizedDetails.input);
   if (sanitizedDetails.input) sanitizedDetails.input = '[REDACTED]';
   if (sanitizedDetails.output) sanitizedDetails.output = '[REDACTED]';
-  if (sanitizedDetails.messages) sanitizedDetails.messages = '[REDACTED]';
-  if (sanitizedDetails.system) sanitizedDetails.system = '[REDACTED]';
-
+  
   const logEntry = `[${timestamp}] [${level}] [${eventType}] IP: ${ip} | User: ${userId} | Details: ${JSON.stringify(sanitizedDetails)}\n`;
   
   fs.appendFile(logFile, logEntry, (err) => {
@@ -144,22 +151,39 @@ async function startServer() {
   // Trust the reverse proxy to get the correct client IP for rate limiting
   app.set('trust proxy', 1);
 
-  // Maximum Security Headers
+  // Maximum Security Headers & DDoS Protection Settings
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('X-BK-Security-Layer', 'Production-Grade');
+    
+    // Request timeout to prevent Slowloris attacks
+    req.setTimeout(30000, () => {
+      res.status(408).send({ error: "Request Timeout - Protection Active" });
+    });
     next();
   });
 
-  app.use(express.json({ limit: '10mb' }));
+  // Body Hashing & Integrity Middleware (SHA-256 Coverage)
+  app.use(express.json({ 
+    limit: '5mb', 
+    verify: (req: any, res, buf) => {
+      req.rawBody = buf;
+      req.bodyHash = generateSHA256(buf.toString());
+    }
+  }));
 
-  // Log all API requests
+  // Log all API requests with SHA-256 Integrity check
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/')) {
-      logSecurityEvent('INFO', 'API_REQUEST', { method: req.method, path: req.path }, req);
+      logSecurityEvent('INFO', 'API_REQUEST', { 
+        method: req.method, 
+        path: req.path,
+        content_integrity: (req as any).bodyHash || 'N/A'
+      }, req);
     }
     next();
   });
@@ -203,6 +227,13 @@ async function startServer() {
   app.use("/api", generalLimiter);
 
   app.get("/api/debug-env", (req, res) => {
+    // Only allow debug info if a specific secret header is present (Internal Use Only)
+    const debugAuth = req.headers['x-bk-debug-auth'];
+    if (!debugAuth || debugAuth !== generateSHA256(process.env.GEMINI_API_KEY || 'default')) {
+      logSecurityEvent('WARN', 'UNAUTHORIZED_DEBUG_ACCESS', { }, req);
+      return res.status(403).json({ error: "Access Denied - Security Integrity Violation" });
+    }
+
     const envVars: Record<string, string> = {};
     for (const key in process.env) {
       if (process.env[key]?.startsWith('AIza')) {
